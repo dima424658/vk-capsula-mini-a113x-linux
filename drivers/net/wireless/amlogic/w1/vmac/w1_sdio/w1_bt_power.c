@@ -210,8 +210,10 @@ static int w1_bt_power_disable(struct regulator_dev *rdev)
 
 	/* an error here would leave the regulator core counting it as on */
 	ret = w1_bt_pmu_set(false);
-	if (ret)
+	if (ret) {
 		dev_warn(rdev_get_dev(rdev), "BT core not stopped: %d\n", ret);
+		return ret;
+	}
 
 	w1_bt_on = false;
 	return 0;
