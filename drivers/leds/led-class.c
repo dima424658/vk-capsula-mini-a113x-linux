@@ -356,6 +356,33 @@ struct led_classdev *__must_check devm_of_led_get(struct device *dev,
 EXPORT_SYMBOL_GPL(devm_of_led_get);
 
 /**
+ * devm_fwnode_led_get - request a LED device by its firmware node
+ * @dev: LED consumer
+ * @fwnode: firmware node of the LED
+ *
+ * The LED device is automatically released when the consumer detaches.
+ * This is useful for consumers with firmware properties that describe
+ * alternative LED providers and must avoid mandatory fw_devlink suppliers.
+ */
+struct led_classdev *__must_check
+devm_fwnode_led_get(struct device *dev, struct fwnode_handle *fwnode)
+{
+	struct device *led_dev;
+	struct led_classdev *led;
+
+	if (!dev || !fwnode)
+		return ERR_PTR(-EINVAL);
+
+	led_dev = class_find_device_by_fwnode(&leds_class, fwnode);
+	led = led_module_get(led_dev);
+	if (IS_ERR(led))
+		return led;
+
+	return __devm_led_get(dev, led);
+}
+EXPORT_SYMBOL_GPL(devm_fwnode_led_get);
+
+/**
  * led_get() - request a LED device via the LED framework
  * @dev: device for which to get the LED device
  * @con_id: name of the LED from the device's point of view

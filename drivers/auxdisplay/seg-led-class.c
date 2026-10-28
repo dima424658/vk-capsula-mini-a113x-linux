@@ -127,46 +127,92 @@ static struct attribute *seg_led_class_attrs[] = {
 };
 ATTRIBUTE_GROUPS(seg_led_class);
 
+static int seg_led_class_get_map(struct device *dev,
+				 struct seg_led_class_priv *priv,
+				 unsigned int offset, bool alternate)
+{
+	void *group;
+	unsigned int i;
+
+	group = devres_open_group(dev, NULL, GFP_KERNEL);
+	if (!group)
+		return -ENOMEM;
+
+	for (i = 0; i < priv->num_segments; i++) {
+		struct led_classdev *led;
+		struct device_node *led_node;
+		int ret;
+
+		if (alternate) {
+			led_node = of_parse_phandle(dev->of_node, "led-maps",
+						    offset + i);
+			if (!led_node) {
+				devres_release_group(dev, group);
+				return -EINVAL;
+			}
+			led = devm_fwnode_led_get(dev, of_fwnode_handle(led_node));
+			of_node_put(led_node);
+		} else {
+			led = devm_of_led_get(dev, offset + i);
+		}
+
+		if (IS_ERR(led)) {
+			ret = PTR_ERR(led);
+			devres_release_group(dev, group);
+			return ret;
+		}
+		priv->segment[i] = led;
+	}
+
+	devres_close_group(dev, group);
+	return 0;
+}
+
 static int seg_led_class_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct seg_led_class_priv *priv;
-	unsigned int num_digits;
-	int count, i;
+	unsigned int num_digits, num_segments, maps, map;
+	const char *led_property;
+	bool alternate;
+	int count, i, ret;
 
-	count = of_count_phandle_with_args(dev->of_node, "leds", NULL);
+	alternate = device_property_read_bool(dev, "alternate-led-map");
+	led_property = alternate ? "led-maps" : "leds";
+	count = of_count_phandle_with_args(dev->of_node, led_property, NULL);
 	if (count < 0)
-		return dev_err_probe(dev, count, "no 'leds' property\n");
+		return dev_err_probe(dev, count, "no '%s' property\n", led_property);
 
-	if (count == 0 || count % SEGMENTS_PER_DIGIT)
+	maps = alternate ? 2 : 1;
+	if (!count || count % (maps * SEGMENTS_PER_DIGIT))
 		return dev_err_probe(dev, -EINVAL,
-				     "%d LEDs given, expected a non-zero multiple of %d\n",
-				     count, SEGMENTS_PER_DIGIT);
+				     "%d LEDs given for %u maps, expected a non-zero multiple of %u\n",
+				     count, maps, maps * SEGMENTS_PER_DIGIT);
 
-	num_digits = count / SEGMENTS_PER_DIGIT;
+	num_segments = count / maps;
+	num_digits = num_segments / SEGMENTS_PER_DIGIT;
 
-	priv = devm_kzalloc(dev, struct_size(priv, segment, count), GFP_KERNEL);
+	priv = devm_kzalloc(dev, struct_size(priv, segment, num_segments), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 
 	/* Both counters before the array is touched: __counted_by. */
-	priv->num_segments = count;
+	priv->num_segments = num_segments;
 	priv->num_digits = num_digits;
 
-	/*
-	 * Seven LEDs per digit, segments a..g, digits left to right.
-	 */
-	for (i = 0; i < count; i++) {
-		struct led_classdev *led = devm_of_led_get(dev, i);
-
-		if (IS_ERR(led))
-			return dev_err_probe(dev, PTR_ERR(led),
-					     "failed to get LED %d\n", i);
-		priv->segment[i] = led;
+	/* Try each complete controller map in order. */
+	for (map = 0; map < maps; map++) {
+		ret = seg_led_class_get_map(dev, priv, map * num_segments,
+					    alternate);
+		if (!ret)
+			break;
+		if (map + 1 == maps)
+			return dev_err_probe(dev, ret,
+					     "failed to get any complete LED map\n");
 	}
 
 	priv->max_brightness = LED_FULL;
-	for (i = 0; i < count; i++)
+	for (i = 0; i < num_segments; i++)
 		priv->max_brightness = min(priv->max_brightness,
 					   priv->segment[i]->max_brightness);
 

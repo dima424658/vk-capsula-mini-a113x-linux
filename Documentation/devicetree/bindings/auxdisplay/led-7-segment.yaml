@@ -40,6 +40,23 @@ properties:
       The segment LEDs, a to g for each digit, digits from left to right. The
       count is a multiple of seven.
 
+  led-maps:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    minItems: 14
+    items:
+      maxItems: 1
+    description:
+      Two complete maps of equal length, each listing segments a to g for each
+      digit from left to right. The preferred map comes first and the fallback
+      map second. The driver selects the first map whose LEDs are registered.
+
+  alternate-led-map:
+    type: boolean
+    description:
+      The led-maps property contains two alternative maps. This uses a custom
+      property so firmware device links do not require both optional LED
+      controllers to be present.
+
   default-brightness-level:
     $ref: /schemas/types.yaml#/definitions/uint32
     description:
@@ -48,7 +65,21 @@ properties:
 
 required:
   - compatible
-  - leds
+
+allOf:
+  - if:
+      required:
+        - alternate-led-map
+    then:
+      required:
+        - led-maps
+      properties:
+        leds: false
+    else:
+      required:
+        - leds
+      properties:
+        led-maps: false
 
 additionalProperties: false
 
