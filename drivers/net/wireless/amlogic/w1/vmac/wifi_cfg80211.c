@@ -1770,7 +1770,11 @@ void vm_cfg80211_indicate_sta_assoc(const struct wifi_station *sta)
     sinfo.assoc_req_ies_len = len;
 #endif
 	exit:
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(7, 0, 0)
+    cfg80211_new_sta(wnet_vif->vm_wdev, sta->sta_macaddr, &sinfo, GFP_ATOMIC);
+#else
     cfg80211_new_sta(dev, sta->sta_macaddr, &sinfo, GFP_ATOMIC);
+#endif
 
     //not ready for kernel=2.6.34
     //cfg80211_rx_mgmt(dev, freq, buf, len, gfp);
@@ -1787,7 +1791,11 @@ vm_cfg80211_indicate_sta_disassoc(const struct wifi_station *sta,
     struct net_device *dev = wnet_vif->vm_ndev;
 
     DPRINTF(AML_DEBUG_CFG80211, "%s %d <%s>\n", __func__, __LINE__, VMAC_DEV_NAME(wnet_vif));
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(7, 0, 0)
+    cfg80211_del_sta(wnet_vif->vm_wdev, sta->sta_macaddr, GFP_ATOMIC);
+#else
     cfg80211_del_sta(dev, sta->sta_macaddr, GFP_ATOMIC);
+#endif
     return;
 }
 
@@ -2000,7 +2008,8 @@ vm_cfg80211_change_vif(struct wiphy *wiphy,
         DPRINTF(AML_DEBUG_CFG80211, "%s %d\n", __func__, __LINE__);
         memset(&cp, 0, sizeof(struct vm_wlan_net_vif_params));
         preempt_scan(wnet_vif->vm_ndev, 100, 100);
-        strncpy(cp.vm_param_name,wnet_vif->vm_ndev->name, strlen(wnet_vif->vm_ndev->name));
+		strscpy(cp.vm_param_name, wnet_vif->vm_ndev->name,
+			sizeof(cp.vm_param_name));
         cp.vm_param_opmode = networkType;
         vm_wlan_net_vif_mode_change(wnet_vif,&cp);
 
@@ -5677,6 +5686,84 @@ static int vm_cfg80211_external_auth(struct wiphy *wiphy, struct net_device *dev
 }
 #endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(7, 0, 0)
+/* New cfg80211 callbacks receive wireless_dev for per-interface operations. */
+static int vm_cfg80211_add_key_wdev(struct wiphy *wiphy,
+		struct wireless_dev *wdev, int link_id, u8 key_index,
+		bool pairwise, const u8 *mac_addr, struct key_params *params)
+{
+	return vm_cfg80211_add_key(wiphy, wdev_to_ndev(wdev), link_id,
+				   key_index, pairwise, mac_addr, params);
+}
+
+static int vm_cfg80211_get_key_wdev(struct wiphy *wiphy,
+		struct wireless_dev *wdev, int link_id, u8 key_index,
+		bool pairwise, const u8 *mac_addr, void *cookie,
+		void (*callback)(void *cookie, struct key_params *))
+{
+	return vm_cfg80211_get_key(wiphy, wdev_to_ndev(wdev), link_id,
+				   key_index, pairwise, mac_addr, cookie, callback);
+}
+
+static int vm_cfg80211_del_key_wdev(struct wiphy *wiphy,
+		struct wireless_dev *wdev, int link_id, u8 key_index,
+		bool pairwise, const u8 *mac_addr)
+{
+	return vm_cfg80211_del_key(wiphy, wdev_to_ndev(wdev), link_id,
+				   key_index, pairwise, mac_addr);
+}
+
+static int vm_cfg80211_set_default_mgmt_key_wdev(struct wiphy *wiphy,
+		struct wireless_dev *wdev, int link_id, u8 key_index)
+{
+	return vm_cfg80211_set_default_mgmt_key(wiphy, wdev_to_ndev(wdev),
+						link_id, key_index);
+}
+
+static int vm_cfg80211_add_station_wdev(struct wiphy *wiphy,
+		struct wireless_dev *wdev, const u8 *mac,
+		struct station_parameters *params)
+{
+	return vm_cfg80211_add_station(wiphy, wdev_to_ndev(wdev), mac, params);
+}
+
+static int vm_cfg80211_del_station_wdev(struct wiphy *wiphy,
+		struct wireless_dev *wdev, struct station_del_parameters *params)
+{
+	return vm_cfg80211_del_station(wiphy, wdev_to_ndev(wdev), params);
+}
+
+static int vm_cfg80211_change_station_wdev(struct wiphy *wiphy,
+		struct wireless_dev *wdev, const u8 *mac,
+		struct station_parameters *params)
+{
+	return vm_cfg80211_change_station(wiphy, wdev_to_ndev(wdev), mac, params);
+}
+
+static int vm_cfg80211_get_station_wdev(struct wiphy *wiphy,
+		struct wireless_dev *wdev, const u8 *mac,
+		struct station_info *sinfo)
+{
+	return vm_cfg80211_get_station(wiphy, wdev_to_ndev(wdev), mac, sinfo);
+}
+
+static int vm_cfg80211_dump_station_wdev(struct wiphy *wiphy,
+		struct wireless_dev *wdev, int idx, u8 *mac,
+		struct station_info *sinfo)
+{
+	return vm_cfg80211_dump_station(wiphy, wdev_to_ndev(wdev), idx, mac,
+					 sinfo);
+}
+
+static int vm_cfg80211_remain_on_channel_wdev(struct wiphy *wiphy,
+		struct wireless_dev *wdev, struct ieee80211_channel *channel,
+		unsigned int duration, u64 *cookie, const u8 *mac_addr)
+{
+	return vm_cfg80211_remain_on_channel(wiphy, wdev, channel, duration,
+					     (unsigned long long *)cookie);
+}
+#endif
+
 /*Modify order of the interfaces according to the definition in linux kernel
 ** those commented were not supported currently in our driver.
 */
@@ -5688,19 +5775,37 @@ static struct cfg80211_ops vm_cfg80211_ops =
     .add_virtual_intf = vm_cfg80211_add_vif,
     .del_virtual_intf = vm_cfg80211_del_vif,
     .change_virtual_intf = vm_cfg80211_change_vif,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(7, 0, 0)
+    .add_key = vm_cfg80211_add_key_wdev,
+    .get_key = vm_cfg80211_get_key_wdev,
+    .del_key = vm_cfg80211_del_key_wdev,
+#else
     .add_key = vm_cfg80211_add_key,
     .get_key = vm_cfg80211_get_key,
     .del_key = vm_cfg80211_del_key,
+#endif
     .set_default_key = vm_cfg80211_config_default_key,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(7, 0, 0)
+    .set_default_mgmt_key = vm_cfg80211_set_default_mgmt_key_wdev,
+#else
     .set_default_mgmt_key = vm_cfg80211_set_default_mgmt_key,
+#endif
     .start_ap = vm_cfg80211_start_ap,
     .change_beacon = vm_cfg80211_change_beacon,
     .stop_ap = vm_cfg80211_stop_ap,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(7, 0, 0)
+    .add_station = vm_cfg80211_add_station_wdev,
+    .del_station = vm_cfg80211_del_station_wdev,
+    .change_station = vm_cfg80211_change_station_wdev,
+    .get_station = vm_cfg80211_get_station_wdev,
+    .dump_station = vm_cfg80211_dump_station_wdev,
+#else
     .add_station = vm_cfg80211_add_station,
     .del_station = vm_cfg80211_del_station,
     .change_station = vm_cfg80211_change_station,
     .get_station = vm_cfg80211_get_station,
-    .dump_station = vm_cfg80211_dump_station,//same to get station
+    .dump_station = vm_cfg80211_dump_station,
+#endif
     .change_bss = vm_cfg80211_change_bss,
     .set_txq_params = vm_cfg80211_set_txq_params,
     .set_monitor_channel = vm_cfg80211_set_monitor_channel,
@@ -5723,7 +5828,11 @@ static struct cfg80211_ops vm_cfg80211_ops =
     .set_pmksa = aml_cfg80211_set_pmksa,
     .del_pmksa = aml_cfg80211_del_pmksa,
     .flush_pmksa = aml_cfg80211_flush_pmksa,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(7, 0, 0)
+    .remain_on_channel = vm_cfg80211_remain_on_channel_wdev,
+#else
     .remain_on_channel = vm_cfg80211_remain_on_channel,
+#endif
     .cancel_remain_on_channel = vm_cfg80211_cancel_remain_on_channel,
     .mgmt_tx = vm_cfg80211_mgmt_tx,
 

@@ -174,8 +174,7 @@ const char *name)
     }
 
     ndev->type = ARPHRD_IEEE80211_RADIOTAP;
-    strncpy(ndev->name, name, IFNAMSIZ);
-    ndev->name[IFNAMSIZ - 1] = 0;
+    strscpy(ndev->name, name, sizeof(ndev->name));
     dev_addr_mod(ndev, 0, wnet_vif->vm_myaddr, WIFINET_ADDR_LEN);
     ndev->hard_header_len = DEFAULT_HARD_HDR_LEN;
 
@@ -360,8 +359,7 @@ const char *name, enum nl80211_iftype type)
     vwdev->netdev = ndev;
     AML_PRINT(AML_DBG_MODULES_P2P,"%s,type %d\n",name,type);
     //ndev->type = ARPHRD_ETHER;
-    strncpy(ndev->name, name, IFNAMSIZ);
-    ndev->name[IFNAMSIZ - 1] = 0;
+    strscpy(ndev->name, name, sizeof(ndev->name));
     ndev->netdev_ops = &vm_cfg80211_go_if_ops;
 
     pnpi = netdev_priv(ndev);

@@ -3575,7 +3575,7 @@ int vm_wlan_net_vif_setup_forchvif(struct wifi_mac *wifimac,
 {
     struct net_device *dev = wnet_vif->vm_ndev;
     if (name != NULL)
-        strncpy(dev->name, name, sizeof(dev->name) - 1);
+        strscpy(dev->name, name, sizeof(dev->name));
     wnet_vif->vm_caps = wifimac->wm_caps;
     wnet_vif->vm_flags_ext &= ~WIFINET_FEXT_SWBMISS;
     wnet_vif->vm_flags = wifimac->wm_flags;
@@ -3670,7 +3670,7 @@ vm_wlan_net_vif_register(struct wlan_net_vif *wnet_vif, char* name)
     struct wifi_mac *wifimac = wnet_vif->vm_wmac;
 
     if (name != NULL)
-        strncpy(dev->name, name, sizeof(dev->name) - 1);
+        strscpy(dev->name, name, sizeof(dev->name));
 
     /*set net device operations, refer to 'wifi_mac_netdev_ops' for details.
         For example, if wlan0 up/down, tcp/ip_xmit_start ...*/
@@ -4071,7 +4071,7 @@ int wifi_mac_create_vmac(struct wifi_mac *wifimac, void *ifr, int cmdFromwhr)
     }
 
     /* interface name 'wlan0', 'p2p0'.... for net device*/
-    strncpy(name, vmparam.vm_param_name, sizeof(name) - 1);
+    strscpy(name, vmparam.vm_param_name, sizeof(name));
     vid = wifi_mac_get_new_vmac_id(wifimac);
     if (vid < 0) {
        ERROR_DEBUG_OUT("alloc wnet_vif id %d <%s>  < fail > \n",vid, vmparam.vm_param_name);

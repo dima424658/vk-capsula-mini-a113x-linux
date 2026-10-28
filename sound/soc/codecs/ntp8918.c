@@ -231,8 +231,7 @@ static int ntp8918_apply_mute(struct ntp8918_priv *ntp8918)
 static int ntp8918_put_master_vol(struct snd_kcontrol *kcontrol,
 				  struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *component =
-		snd_soc_kcontrol_component(kcontrol);
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
 	struct ntp8918_priv *ntp8918 = snd_soc_component_get_drvdata(component);
 	unsigned int pwm_mask;
 	int ret;
